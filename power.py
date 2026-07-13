@@ -48,8 +48,7 @@ import pandas as pd
 
 from splitter import EMBARGO, HORIZON, PurgedWalkForward
 
-# --- label / strategy constants (phase 1, unchanged) -----------
-K, VOL_SPAN, DRIFT_WIN = 0.4, 20, 252
+# --- strategy constants (label params live in make_features) ---
 COST_ONEWAY = 2.5e-4                     # spec #4
 ANN         = np.sqrt(252.0)
 ALPHA_TEST  = 0.10                       # two-sided -> 95th pct luck bar
@@ -66,30 +65,26 @@ LAG, FLAT, BEAT = 0, 1, 2
 # 1. Real panel: returns, ternary labels, folds
 # ---------------------------------------------------------------
 def load_test_panel():
-    raw = pd.read_parquet("data/raw/tiingo_spy_2005-01-01.parquet")
-    close = raw["adjClose"]
-    log_ret = np.log(close / close.shift(1))
-    fwd     = np.log(close.shift(-HORIZON) / close)
-    drift   = np.log(close / close.shift(HORIZON)).rolling(
-                  DRIFT_WIN, min_periods=60).mean()
-    excess  = fwd - drift
-    sigma5  = log_ret.ewm(span=VOL_SPAN).std() * np.sqrt(HORIZON)
-    tau     = K * sigma5
+    """Labels and returns come from the canonical pipeline (ingest ->
+    make_features), not a local copy — if the label spec ever changes,
+    it changes in exactly one place. make_features encodes y in
+    {-1, 0, +1}; recoded here to the LAG/FLAT/BEAT integer classes."""
+    from ingest import assemble_panel, load_tiingo, load_vix
+    from make_features import build_dataset
 
-    label = pd.Series(FLAT, index=raw.index)
-    label[excess >  tau] = BEAT
-    label[excess < -tau] = LAG
+    df = build_dataset(assemble_panel(load_tiingo(), load_vix()))
+    label = df["y"].map({-1.0: LAG, 0.0: FLAT, 1.0: BEAT})
 
-    idx = raw.index[fwd.notna() & drift.notna() & sigma5.notna()]
-    folds = PurgedWalkForward(raw.index).split(idx)
+    idx = df.index[df["y"].notna()]              # rows with a computable label
+    folds = PurgedWalkForward(df.index).split(idx)
 
     test_dates = folds[0].test_dates.append([f.test_dates for f in folds[1:]])
     fold_id = np.concatenate(
         [np.full(len(f.test_dates), f.fold) for f in folds])
 
     return {
-        "r":      log_ret.loc[test_dates].to_numpy(),      # daily returns
-        "y":      label.loc[test_dates].to_numpy(),        # true ternary label
+        "r":      df["log_ret"].loc[test_dates].to_numpy(),         # daily returns
+        "y":      label.loc[test_dates].to_numpy(dtype=np.int64),   # ternary label
         "fold":   fold_id,
         "n_days": len(test_dates),
     }

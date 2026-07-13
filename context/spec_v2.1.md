@@ -126,3 +126,9 @@ Full pre-registered record in `power_results.md`. The numbers that bind:
    marginal, at the plausible edge. Proceeding, eyes open.
 4. Only then: remaining Phase 2 (validate.py, FRED VIX ingest,
    point-in-time recompute test) and Phase 3 features.
+
+**Phase 3 pre-registration (2026-07-14):** all feature diagnostics, drift
+plots, and feature-selection decisions use data ≤ 2021-12-31 only. The
+handoff's "plot every feature over the full history" would otherwise
+include the locked holdout — choosing features by their behaviour over
+2022+ is selection on holdout data, and no mechanical check catches it.
