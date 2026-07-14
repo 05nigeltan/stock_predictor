@@ -78,6 +78,41 @@ def e1():
     return report("E1 logistic", x, extra)
 
 
+def e2():
+    """E2 — random forest, the bagging rung.
+
+    Pre-registered config: RandomForestClassifier(n_estimators=500,
+    min_samples_leaf=50, max_features='sqrt', random_state=SEED),
+    argmax, no scaling (trees are scale-invariant), no tuning.
+    min_samples_leaf=50 mirrors the frozen LightGBM philosophy: with
+    ~843 effective samples, every leaf must be supported by real data.
+    Purpose: the hard-to-overfit-badly sanity rung between the linear
+    model and boosting. Must beat E1 (acc 39.0 / IR -0.49) to show the
+    features carry nonlinear structure.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+
+    df, matrix, folds, test_dates, fold_id, y_true, r = load_everything()
+    codes, last_model = walkforward_classifier(
+        lambda: RandomForestClassifier(
+            n_estimators=500, min_samples_leaf=50, max_features="sqrt",
+            random_state=SEED, n_jobs=-1),
+        matrix, folds)
+    x = evaluate_strategy("E2 rand forest (argmax)", codes, r, y_true,
+                          fold_id)
+
+    # Final-fold impurity importances, for the record only — biased
+    # toward high-cardinality features and smeared by the correlated
+    # clusters; the real attribution verdict waits for SHAP in Phase 5.
+    feats = matrix.columns[:-1]
+    imp = pd.Series(last_model.feature_importances_, index=feats
+                    ).sort_values(ascending=False)
+    extra = ["", "  Final-fold impurity importances (top 8; record only —",
+             "  cluster-smeared, SHAP is the verdict):"]
+    extra += [f"    {n:>16}: {v:.3f}" for n, v in imp.head(8).items()]
+    return report("E2 random forest", x, extra)
+
+
 if __name__ == "__main__":
     import sys
     globals()[sys.argv[1] if len(sys.argv) > 1 else "e1"]()

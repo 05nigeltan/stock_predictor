@@ -87,3 +87,29 @@ Full record: `reports/e1_logistic.md`.
    cluster are collinearity shadows, per the correlation map — do not
    read individual signs within a cluster. §1.5's falsification test
    stays with SHAP on the trees.
+
+### E2 — random forest, argmax (2026-07-15)
+
+**Config (pre-registered):** RandomForestClassifier(n_estimators=500,
+min_samples_leaf=50, max_features='sqrt', seed 20260713), argmax, no
+scaling, no tuning. Full record: `reports/e2_random_forest.md`.
+
+**Result:** acc **39.8%** | activity 24.1% | IR **−0.65** [−1.21, −0.09]
+| ann.α −2.54% | folds **5/10** | PT p = 0.00 → **fails IR + folds.**
+
+**Reading:**
+1. **The nonlinear lift over linear is ~nil.** +0.8pp accuracy over E1
+   is inside noise (SE ≈ 2.2pp at n_indep ≈ 503); the primary metric is
+   WORSE (IR −0.65 vs −0.49, CI now fully below zero). Directionally
+   consistent with the honest prior: on 21 hand-encoded features and
+   ~850 effective samples, there may be little nonlinear structure left
+   for trees to find.
+2. Fold profile inverted vs E1: 5/10 positive folds (best yet) but a
+   worse pooled IR — RF wins small in half the years and loses big in
+   the others; its alpha is more volatile per unit of mean.
+3. Importances (record only, cluster-smeared): both clusters carry —
+   trend/position (`sma20_to_sma200`, `ret_10d`, `px_to_sma20`) and vol
+   regime (`vol_21d`, `vix_lag1`). Consistent with conditioning story.
+4. Bar for E3 (LightGBM) unchanged and now two-sided: beat E1's IR
+   −0.49 to justify boosting; beat 39.8% acc to claim any nonlinear
+   signal at all.
