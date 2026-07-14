@@ -82,25 +82,54 @@ joint false-pass rate remains ~0.1%.
 **Cost of the error:** one diagnostic run. Same lesson as A4: a threshold
 is only as meaningful as the null it was calibrated against.
 
+### A13 · One-session lookahead in the tranche simulator  (2026-07-15)
+
+**Superseded:** the original `active_returns` position indexing (power.py,
+carried into evaluate.py at extraction).
+
+**Why it died:** the book earning day t's return was computed as
+mean(s[t−4 .. t]) — including the signal formed at close t, which cannot
+earn a return that finished at the moment the signal existed. The spec
+(#3) and the function's own docstring said mean(s[t−5 .. t−1]); the code
+was off by one session. Invisible to every aggregate check (under the
+null, signal timing is exchangeable — drag arithmetic, PT calibration
+and luck bars were all unaffected), it only mattered where signals
+correlate with returns: the skill sweep that set the MDE. Caught by the
+first hand-computed ground-truth test of the tranche book, written when
+the machinery was extracted to evaluate.py.
+
+**Replaced by:** corrected indexing; a tranche opened at close t now
+earns exactly r_{t+1}..r_{t+5} — the label window. Consequences, all
+favourable: delivered IR per unit of skill rises (5/5 aligned days
+instead of 4/5 + 1 noise), so MDE falls 0.46 → 0.44 and the required
+lag-call hit rate falls ~57% → ~51.5%. Null luck bars essentially
+unchanged (−0.24 → −0.25 at 30% is MC noise), confirming the
+exchangeability argument.
+
+**Cost of the error:** zero — caught before any baseline or model
+consumed the simulator. Lesson (same family as A3's units bug): aggregate
+consistency checks validate distributions, not timing; only a
+hand-computed example pins down an index.
+
 ---
 
-## power.py results — FROZEN (seed 20260713, gate ≥6/10, run 2026-07-14)
+## power.py results — FROZEN (seed 20260713, gate ≥6/10, simulator per A13, run 2026-07-15)
 
 Full pre-registered record in `power_results.md`. The numbers that bind:
 
 | activity | IR_min (luck bar, null 95th pct) | MDE (true IR @ 80% power) | lag-call hit @ MDE | verdict |
 |---|---|---|---|---|
-| 10% | **0.06** | 0.46 | 56.9% (vs ~30% base) | marginal |
-| 20% | −0.11 | 0.46 | 54.4% | marginal |
-| 30% | −0.24 | 0.47 | 53.4% | marginal |
+| 10% | **0.06** | 0.44 | 51.5% (vs ~30% base) | plausible |
+| 20% | −0.11 | 0.45 | 49.3% | plausible |
+| 30% | −0.25 | 0.45 | 48.3% | plausible |
 
 - `IR_min` is evaluated at the model's **realized** activity (nearest MC
   level above). Joint false-pass under the null: ≤0.2% at every level.
-- MDE ≈ 0.46 at every activity level — the criterion detects only effects
-  at the optimistic edge of the published literature (IR ~0.4). A true IR
-  of 0.3 would be caught well under 80% of the time. **This is the honest
-  best this dataset supports** — accepted with eyes open, per the
-  build-order decision point, rather than papered over.
+- MDE ≈ 0.44–0.45 at every activity level — at the optimistic edge of the
+  published literature (IR ~0.4), now requiring ~48–51% lag-call
+  precision vs a ~30% base. A true IR of 0.3 is still caught well under
+  80% of the time. **This is the honest best this dataset supports** —
+  accepted with eyes open, per the build-order decision point.
 - The kill criterion (≤25 experiments / 8 weeks) is unchanged and now has
   a defensible statistical floor under it.
 

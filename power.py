@@ -46,19 +46,15 @@ Run:  python power.py          (writes power_results.md next to it)
 import numpy as np
 import pandas as pd
 
-from splitter import EMBARGO, HORIZON, PurgedWalkForward
+from evaluate import (ALPHA_TEST, BEAT, FLAT, LAG, active_returns,
+                      annualized_ir, folds_positive, pt_pvalue)
+from splitter import HORIZON, PurgedWalkForward
 
-# --- strategy constants (label params live in make_features) ---
-COST_ONEWAY = 2.5e-4                     # spec #4
-ANN         = np.sqrt(252.0)
-ALPHA_TEST  = 0.10                       # two-sided -> 95th pct luck bar
+# --- simulation constants (strategy machinery lives in evaluate) ---
 TARGET_POW  = 0.80
 RUN_LEN     = 5                          # mean deviation run length, days
 N_SIMS      = 4000
 SEED        = 20260713
-
-# LAG=0, FLAT=1, BEAT=2  (positions: LAG -> flat book, else long)
-LAG, FLAT, BEAT = 0, 1, 2
 
 
 # ---------------------------------------------------------------
@@ -129,71 +125,8 @@ def inject_skill(rng, preds, y, q):
 
 
 # ---------------------------------------------------------------
-# 3. Tranche book -> daily net active returns  (spec #3, #4)
-# ---------------------------------------------------------------
-def active_returns(preds, r):
-    """alpha_t = (position_t - 1) * r_t - cost_t, per sim.
-
-    signal s in {0,1}: 1 unless the prediction is LAG. The book earning
-    day t's return holds tranches opened at closes t-5..t-1, so
-    position_t = mean(s[t-5..t-1]); days before the test start are seeded
-    long (s=1), the benchmark state. Each day exactly one tranche rolls:
-    it trades iff its new signal differs from the one it replaces
-    (s_t vs s_{t-5}), paying one-way COST on 1/5 of capital.
-    """
-    s = (preds != LAG).astype(np.float64)
-    pad = np.ones((s.shape[0], HORIZON))
-    sp = np.concatenate([pad, s], axis=1)                # seeded history
-
-    cs = np.cumsum(sp, axis=1)
-    # mean of sp[t .. t+4] = mean(s[t-5 .. t-1]) in unpadded time
-    pos = (cs[:, HORIZON:] - cs[:, :-HORIZON]) / HORIZON
-    cost = (COST_ONEWAY / HORIZON) * np.abs(sp[:, HORIZON:] - sp[:, :-HORIZON])
-    return (pos - 1.0) * r[None, :] - cost
-
-
-def annualized_ir(alpha):
-    mu, sd = alpha.mean(axis=1), alpha.std(axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        ir = np.where(sd > 0, mu / sd, 0.0) * ANN
-    return ir, mu * 252.0                                # IR, ann. mean alpha
-
-
-def folds_positive(alpha, fold_id, need=6):        # 6, not 8 — see A12 note above
-    wins = np.zeros(alpha.shape[0], dtype=int)
-    for k in range(fold_id.max() + 1):
-        wins += alpha[:, fold_id == k].mean(axis=1) > 0
-    return wins >= need
-
-
-# ---------------------------------------------------------------
-# 4. m-class Pesaran-Timmermann, influence-function form,
-#    on non-overlapping (every 5th) test days. Vectorized over sims.
-# ---------------------------------------------------------------
-def pt_pvalue(preds, y):
-    p = preds[:, ::HORIZON]                              # sims x n
-    t = y[::HORIZON]
-    n = t.size
-    n_sims = p.shape[0]
-
-    hit = (p == t)
-    P = hit.mean(axis=1)
-
-    ym = np.bincount(t, minlength=3) / n                 # outcome margins
-    pm = np.stack([(p == c).mean(axis=1) for c in range(3)], axis=1)
-    Pstar = (pm * ym[None, :]).sum(axis=1)
-
-    # influence: psi_k = 1(hit) - ym[pred_k] - pm[label_k], centered per sim
-    psi = hit - ym[p] - pm[np.arange(n_sims)[:, None], t[None, :]]
-    V = psi.var(axis=1) / n
-    with np.errstate(invalid="ignore", divide="ignore"):
-        S = np.where(V > 0, (P - Pstar) / np.sqrt(V), 0.0)
-    from scipy.stats import norm
-    return 1.0 - norm.cdf(S)                             # one-sided: skill > chance
-
-
-# ---------------------------------------------------------------
-# 5. The experiment
+# 3. The experiment
+#    (tranche book, IR, fold gate, PT all live in evaluate.py)
 # ---------------------------------------------------------------
 def run():
     panel = load_test_panel()
