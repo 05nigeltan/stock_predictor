@@ -113,3 +113,36 @@ scaling, no tuning. Full record: `reports/e2_random_forest.md`.
 4. Bar for E3 (LightGBM) unchanged and now two-sided: beat E1's IR
    −0.49 to justify boosting; beat 39.8% acc to claim any nonlinear
    signal at all.
+
+### E3 — LightGBM, argmax, frozen regularize-hard config (2026-07-15)
+
+**Config (pre-registered):** multiclass, lr=0.01, num_leaves=7,
+max_depth=3, min_data_in_leaf=50, feature/bagging fraction 0.7,
+lambda_l2=10, ceiling 2000 trees, early_stopping_rounds=100 on the last
+15% of each fold's train (chronological, 5-session inner purge, never
+test). Argmax, no tuning. Full record: `reports/e3_lightgbm.md`.
+
+**Result:** acc **39.1%** | activity **16.2%** | IR **−0.57**
+[−1.12, −0.06] | ann.α −2.13% | folds 3/10 | PT p = 0.02 → **fails
+IR + folds.**
+
+**The ladder verdict (E1→E2→E3, the pre-registered model progression):**
+1. **Accuracy converged: 39.0 / 39.8 / 39.1.** Three model families,
+   one number, all within noise. There is no nonlinear lift on these 21
+   features — the linear model already extracts what the trees extract.
+   This is the plan doc's honestly-expected outcome, now measured.
+2. **Early stopping wanted almost nothing: 10–251 trees (mean 97) of a
+   2000 ceiling.** The boosted signal is shallow; after ~100 small
+   trees there is nothing left to fit that survives regularization.
+3. Activity fell down the ladder (26% → 24% → 16%) but the IR did not
+   follow (−0.49 / −0.65 / −0.57): even LightGBM's more selective
+   argmax lag calls don't clear cost + drag. Selectivity by argmax
+   sharpening is not enough — if it exists anywhere, it is in the
+   probability TAIL, which no experiment has yet read.
+4. Every rung passes PT (p ≤ 0.02). Direction was never the problem.
+
+**Remaining pre-registered mechanism, untested:** probability
+thresholding — fire only when P(lag) clears a bar chosen on TRAIN-SIDE
+validation, targeting the ~10% activity floor where power.py says
+~51.5% lag precision meets the MDE. That is E4. If the tail carries no
+extra precision, the negative result is effectively complete.

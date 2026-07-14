@@ -113,6 +113,58 @@ def e2():
     return report("E2 random forest", x, extra)
 
 
+def e3():
+    """E3 — LightGBM, the workhorse, frozen regularize-hard config.
+
+    Pre-registered config (unchanged from the plan doc): multiclass,
+    learning_rate=0.01, num_leaves=7, max_depth=3, min_data_in_leaf=50,
+    feature_fraction=0.7, bagging_fraction=0.7 (freq 1), lambda_l2=10.0,
+    n_estimators=2000 ceiling with early_stopping_rounds=100 on
+    multiclass logloss. Validation for early stopping: the LAST 15% of
+    each fold's train window (chronological), separated from the inner
+    train by a 5-session purge — same purge rule as every other
+    boundary; never test data. Argmax, no tuning. Seed 20260713.
+
+    Two-sided question: beat E1's IR (-0.49) to justify boosting; beat
+    E2's acc (39.8%) to claim nonlinear signal exists at all.
+    """
+    import lightgbm as lgb
+    import numpy as np
+
+    from make_features import FEATURES, HORIZON
+
+    df, matrix, folds, test_dates, fold_id, y_true, r = load_everything()
+    X, y = matrix[list(FEATURES)], matrix["y"]
+
+    params = dict(objective="multiclass", num_class=3, learning_rate=0.01,
+                  num_leaves=7, max_depth=3, min_data_in_leaf=50,
+                  feature_fraction=0.7, bagging_fraction=0.7, bagging_freq=1,
+                  lambda_l2=10.0, n_estimators=2000, random_state=SEED,
+                  verbosity=-1)
+
+    out, best_iters = [], []
+    for f in folds:
+        assert f.train_dates.max() < f.test_dates.min()
+        n_valid = int(0.15 * len(f.train_dates))
+        inner = f.train_dates[: -(n_valid + HORIZON)]   # 5-session purge
+        valid = f.train_dates[-n_valid:]
+
+        model = lgb.LGBMClassifier(**params)
+        model.fit(X.loc[inner], y.loc[inner],
+                  eval_set=[(X.loc[valid], y.loc[valid])],
+                  callbacks=[lgb.early_stopping(100, verbose=False)])
+        best_iters.append(model.best_iteration_)
+        out.append(model.predict(X.loc[f.test_dates]))
+
+    codes = (np.concatenate(out) + 1).astype(np.int64)
+    x = evaluate_strategy("E3 lightgbm (argmax)", codes, r, y_true, fold_id)
+
+    extra = ["", f"  Early stopping picked {min(best_iters)}-"
+                 f"{max(best_iters)} trees per fold "
+                 f"(mean {np.mean(best_iters):.0f} of 2000 ceiling)"]
+    return report("E3 lightgbm", x, extra)
+
+
 if __name__ == "__main__":
     import sys
     globals()[sys.argv[1] if len(sys.argv) > 1 else "e1"]()
