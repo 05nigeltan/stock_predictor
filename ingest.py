@@ -33,8 +33,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 from validate import DataValidationError, validate_raw
+
+load_dotenv(Path(__file__).with_name(".env"))
 
 RAW_DIR      = Path("data/raw")
 CURATED_DIR  = Path("data/curated")

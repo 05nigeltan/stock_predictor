@@ -162,6 +162,15 @@ handoff's "plot every feature over the full history" would otherwise
 include the locked holdout — choosing features by their behaviour over
 2022+ is selection on holdout data, and no mechanical check catches it.
 
+**1993–2004 cross-check (2026-07-15, closes the last Phase 1 TODO):**
+always-long on 5d windows was 56.8% (SE ±2.0%) in 1993–2004 vs 60.0%
+(±1.7%) in 2005–2021 — ~1.2 combined SEs apart, suggestive of
+regime-dependence, exactly where the Phase 1 doc guessed. No criterion
+change needed: the v2.1 metric benchmarks against always-long on the
+same fold's days, so a drifting base rate cannot bias pass/fail. Read
+fold-level variation with this in mind. Raw pull cached
+(`tiingo_spy_1993-01-29.parquet`).
+
 **Phase 3 drift review (2026-07-15):** 21 features built and registered
 (`make_features.FEATURES`); all pass the PIT harness. Drift screen
 (`reports/feature_drift.{md,png}`, train halves, flag at |shift| > 0.25

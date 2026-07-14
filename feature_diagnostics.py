@@ -80,6 +80,32 @@ def plot_grid(feats: pd.DataFrame, table: pd.DataFrame, path: str):
     print(f"[written] {path}")
 
 
+def correlation_report(feats: pd.DataFrame, path: str, flag_at=0.8):
+    """Train-only Spearman correlation. Not a selection tool — a map for
+    reading SHAP in Phase 5: importance smears across correlated copies,
+    so 'no single feature dominates' inside a cluster is not 'no signal'."""
+    corr = feats.corr(method="spearman")
+
+    fig, ax = plt.subplots(figsize=(9, 8))
+    im = ax.imshow(corr.values, vmin=-1, vmax=1, cmap="RdBu_r")
+    ax.set_xticks(range(len(corr)), corr.columns, rotation=90, fontsize=7)
+    ax.set_yticks(range(len(corr)), corr.columns, fontsize=7)
+    fig.colorbar(im, shrink=0.8)
+    ax.set_title("Feature correlation (Spearman) — train period only",
+                 fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    print(f"[written] {path}")
+
+    upper = corr.where(np.triu(np.ones(corr.shape, dtype=bool), k=1))
+    pairs = (upper.stack().loc[lambda s: s.abs() > flag_at]
+                  .sort_values(key=abs, ascending=False))
+    print(f"\nClusters (|rho| > {flag_at}) — expect SHAP to smear inside these:")
+    for (a, b), rho in pairs.items():
+        print(f"  {a:>16} ~ {b:<16} {rho:+.2f}")
+    return pairs
+
+
 if __name__ == "__main__":
     import os
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -102,3 +128,4 @@ if __name__ == "__main__":
     print(f"[written] {OUT_DIR}/feature_drift.md")
 
     plot_grid(feats, table, f"{OUT_DIR}/feature_drift.png")
+    correlation_report(feats, f"{OUT_DIR}/feature_corr.png")
