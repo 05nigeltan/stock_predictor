@@ -132,3 +132,14 @@ plots, and feature-selection decisions use data ≤ 2021-12-31 only. The
 handoff's "plot every feature over the full history" would otherwise
 include the locked holdout — choosing features by their behaviour over
 2022+ is selection on holdout data, and no mechanical check catches it.
+
+**Phase 3 drift review (2026-07-15):** 21 features built and registered
+(`make_features.FEATURES`); all pass the PIT harness. Drift screen
+(`reports/feature_drift.{md,png}`, train halves, flag at |shift| > 0.25
+pooled sd) flagged 6: `vol_10d`, `vol_21d`, `vix_lag1` (regime-persistent
+BY DESIGN — they are the conditioning variables; the "drift" is
+volatility clustering, i.e. the hypothesis), and `ret_63d`,
+`sma20_to_sma200`, `rsi_14` (half-sample means differ because the halves'
+regime composition differs — GFC in the first, low-vol bull in the
+second; each is relative/bounded with no monotone march). All 21
+retained. No feature shows mechanical non-stationarity.
