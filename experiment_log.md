@@ -61,4 +61,29 @@ Pooled walk-forward test folds 2012–2021, 2517 days. Accuracy floor
 
 ## Experiments
 
-*(none yet — E1 opens Phase 5)*
+*Budget clock started 2026-07-15 (E1). 24 remaining.*
+
+### E1 — logistic regression, argmax (2026-07-15)
+
+**Config (pre-registered):** multinomial LogisticRegression(C=1.0, L2,
+lbfgs, max_iter=5000), 21 features standard-scaled inside the fold
+pipeline (train-fit only), argmax, no thresholding. Seed 20260713.
+Full record: `reports/e1_logistic.md`.
+
+**Result:** acc **39.0%** | activity 25.9% | IR **−0.49** [−1.10, 0.03]
+| ann.α −2.79% | folds 2/10 | PT p = 0.02 → **fails IR + folds gates.**
+
+**Reading:**
+1. Best accuracy so far by 3pp (B5 36.0, B6 35.8) and the least-bad IR
+   of any active strategy (B3–B6 sat at −0.74 to −0.89). The linear
+   share of the signal is substantial — the bar for trees is now
+   acc 39.0 / IR −0.49, not the baselines.
+2. Improvement came largely through LOWER activity (26% vs ~35%): less
+   indiscriminate firing, less drag. Consistent with the selectivity
+   thesis; the 90% CI's upper edge already touches +0.03.
+3. Final-fold coefficients: reversal-shaped — high `rsi_14` /
+   `px_to_sma20` push toward lag (overbought ⇒ fade). Negative partials
+   on `ret_3d`/`ret_10d` inside the same ≥0.8-correlated position
+   cluster are collinearity shadows, per the correlation map — do not
+   read individual signs within a cluster. §1.5's falsification test
+   stays with SHAP on the trees.
