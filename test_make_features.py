@@ -15,16 +15,22 @@ import pandas as pd
 import pytest
 
 from ingest import assemble_panel
-from make_features import BACKWARD, FEATURES, FORWARD, RET_LAGS, build_dataset
+from make_features import (BACKWARD, FEATURES, FORWARD, HORIZON, RET_LAGS,
+                           build_dataset, materialize)
 
 WARMUP = 300         # rows; longest lookback is sma200 + a safety margin
 
 
 @pytest.fixture(scope="module")
-def df():
+def panel():
     raw = pd.read_parquet("data/raw/tiingo_spy_2005-01-01.parquet")
     vix = pd.read_parquet("data/raw/fred_vixcls_2005-01-01.parquet")["vix"]
-    return build_dataset(assemble_panel(raw, vix))
+    return assemble_panel(raw, vix)
+
+
+@pytest.fixture(scope="module")
+def df(panel):
+    return build_dataset(panel)
 
 
 # ---------------------------------------------------------------
@@ -108,3 +114,53 @@ def test_vix_features_lag_discipline(df):
     manual = df.vix_lag1.pct_change(5)
     both = df.vix_chg_5d.notna()
     assert np.allclose(df.vix_chg_5d[both], manual[both], atol=1e-15)
+
+
+# ---------------------------------------------------------------
+# Materialization — panel in, modelling matrix out, gated
+# ---------------------------------------------------------------
+def test_materialize_shape_and_completeness(panel, df):
+    matrix = materialize(panel)
+    assert list(matrix.columns) == [*FEATURES, "y"]
+    assert not matrix.isna().any().any()             # complete rows only
+    assert matrix.index.isin(panel.index).all()      # subset of the calendar
+    # Dropped rows are exactly warm-up + the unlabelled tail (VIX-NaN
+    # count is currently zero): the last labelled feature-complete row.
+    expected = df[[*FEATURES, "y"]].dropna()
+    assert matrix.index.equals(expected.index)
+    assert matrix.index[-1] == df.index[-HORIZON - 1]
+
+
+def test_materialize_values_match_complete_run(panel, df):
+    # Every matrix value equals its complete-calendar computation — the
+    # gate checks y; this asserts it for the features too.
+    matrix = materialize(panel)
+    for col in (*FEATURES, "y"):
+        assert np.allclose(matrix[col],
+                           df[col].reindex(matrix.index), atol=1e-12)
+
+
+def test_materialize_drops_vix_holes_without_corrupting_labels(panel, df):
+    # THE end-to-end sequencing demonstration: punch VIX holes into the
+    # panel (future FRED gaps), materialize, and require (a) the holes'
+    # full footprint vanishes, (b) every surviving label still matches
+    # the complete-calendar run — shift(-5) never reached across a hole.
+    #
+    # Footprint finding (this test originally expected 3 dropped rows and
+    # got 6): a missing publication at d also kills vix_chg_5d at d+5,
+    # whose 5-session change references d's value. One missing VIX day
+    # costs TWO matrix rows. Priced into the missingness gate's margin:
+    # 0.5% missing days -> ~1% of rows.
+    holed = panel.copy()
+    victims = holed.index[[1000, 2000, 3000]]
+    holed.loc[victims, "vix_lag1"] = np.nan
+
+    matrix = materialize(holed)                      # gate runs inside
+    assert not matrix.index.isin(victims).any()
+
+    clean = materialize(panel)
+    echoes = panel.index[[1005, 2005, 3005]]         # d+5 sessions
+    assert clean.index.difference(matrix.index).equals(
+        victims.union(echoes))                       # exactly the footprint
+    assert np.allclose(matrix["y"],
+                       clean["y"].reindex(matrix.index), atol=1e-15)

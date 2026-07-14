@@ -141,10 +141,36 @@ def build_dataset(panel: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def materialize(panel: pd.DataFrame) -> pd.DataFrame:
+    """Panel in, modelling matrix out: FEATURES + y, complete rows only.
+
+    Takes the PANEL deliberately — the complete dataset is built inside,
+    so the sequencing bug (drop rows, then compute) cannot be expressed
+    through this API. The gate then verifies what the construction
+    already guarantees, as a tripwire for future refactors: every y in
+    the matrix must equal its complete-calendar computation, row for row.
+
+    Rows dropped here: feature warm-up (~200 sessions, sma200 binds),
+    the last HORIZON sessions (no label yet), and any VIX-NaN sessions
+    (currently zero — see ingest.vix_missingness_gate). The walk-forward
+    splitter re-derives label spans from the panel calendar, so the
+    holes this creates are already handled downstream.
+    """
+    from validate import forward_columns_match_complete_calendar
+
+    complete = build_dataset(panel)
+    matrix = complete[[*FEATURES, "y"]].dropna()
+    forward_columns_match_complete_calendar(matrix, complete, ["y"])
+    return matrix
+
+
 if __name__ == "__main__":
+    from pathlib import Path
+
     from ingest import build_panel
 
-    df = build_dataset(build_panel(write=False))
+    panel = build_panel(write=False)
+    df = build_dataset(panel)
 
     # Regression anchor: the frozen Phase 1 class balance at k=0.4.
     train = df.loc[df.index <= "2021-12-31"].iloc[:-HORIZON]
@@ -153,3 +179,13 @@ if __name__ == "__main__":
           f"beat {bal.get(1.0, 0):.1%}  flat {bal.get(0.0, 0):.1%}  "
           f"lag {bal.get(-1.0, 0):.1%}")
     print("Phase 1 frozen:                beat 35.4%  flat 34.0%  lag 30.6%")
+
+    matrix = materialize(panel)
+    out = Path("data/curated/model_matrix.parquet")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    matrix.to_parquet(out)
+    print(f"\n[curated] wrote {out}")
+    print(f"  matrix: {matrix.shape[0]} rows x {len(FEATURES)} features "
+          f"+ y,  {matrix.index.min().date()} -> {matrix.index.max().date()}")
+    print(f"  rows dropped vs panel: {len(panel) - len(matrix)} "
+          f"(warm-up + unlabelled tail + VIX-NaN)")
