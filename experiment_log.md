@@ -146,3 +146,41 @@ thresholding — fire only when P(lag) clears a bar chosen on TRAIN-SIDE
 validation, targeting the ~10% activity floor where power.py says
 ~51.5% lag precision meets the MDE. That is E4. If the tail carries no
 extra precision, the negative result is effectively complete.
+
+### E4 — LightGBM tail, fixed top-decile rule (2026-07-15)
+
+**Config (decisions locked before the run):** E3's model verbatim;
+quantile rule (ranking only — calibration irrelevant by design);
+threshold = 90th pct of P(lag) on each fold's inner-validation days,
+applied to test as it arrives; flat iff fired; PT preds LAG-when-fired
+else argmax{beat,flat}; Q = 0.90 fixed, never tuned. Full record:
+`reports/e4_lgbm_tail.md`.
+
+**Result:** acc 40.0% | activity 19.5% | IR **−0.57** [−1.04, −0.11] |
+folds 4/10 | PT p = 0.00 | **lag precision on fired days: 33.5%** vs
+30.0% base and **51.5% required** → **fails IR + folds.**
+
+**Reading:**
+1. **The tail is empty.** The model's most-confident lag calls are
+   +3.5pp better than the base rate, a sixth of the +21.5pp the MDE
+   demands. Confidence ranking carries almost no extra precision:
+   the model knows THAT reversal exists, not WHEN it is strong.
+2. IR identical to E3's argmax (−0.57) — thresholding changed which
+   days fire, not how good firing is.
+3. Implementation honesty note: the valid-set quantile transferred
+   imperfectly (realized activity 19.5%, not 10% — test-time P(lag)
+   runs hotter than inner-valid). Doesn't rescue the verdict: precision
+   at the achieved selectivity is nowhere near the bar, and deeper
+   selectivity with an uninformative ranking cannot help.
+
+### Status after E1–E4 (budget: 21 remaining)
+
+Every mechanism pre-registered in the plan has now been tested and
+priced: linear (E1), bagging (E2), boosting (E3), tail selectivity
+(E4). Uniform verdict: **directional skill is real (PT ≤ 0.02
+everywhere), linear, shallow, and cannot be monetized against
+always-long at any tested selectivity.** No configuration approaches
+the gates. The pre-registered decision point is live: negative-result
+write-up + single holdout run, or a NEW pre-registered hypothesis
+(spec amendment required — e.g. meta-labeling), not further variations
+on the tested mechanisms.

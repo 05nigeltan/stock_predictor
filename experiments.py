@@ -165,6 +165,78 @@ def e3():
     return report("E3 lightgbm", x, extra)
 
 
+def e4():
+    """E4 — the probability tail: E3's LightGBM, fixed top-decile rule.
+
+    Pre-registered config (decisions locked 2026-07-15, before any run):
+      - Base model: E3's frozen config verbatim, same inner-valid early
+        stopping, seed 20260713. Nothing about the model changes.
+      - Rule: quantile, not absolute — only the RANKING of P(lag) is
+        used, so LightGBM's miscalibration is irrelevant by design.
+      - Threshold: per fold, the 90th percentile of P(lag) on that
+        fold's INNER-VALIDATION days (out-of-fit, the honest analogue
+        of the test-time score distribution; the test window's own
+        quantile would need the future). Fixed at 0.90. Never tuned.
+      - Position: flat iff P(lag) >= threshold, else long.
+      - PT predictions: LAG when fired, else argmax of {beat, flat}.
+    The question: are the model's MOST CONFIDENT lag calls better than
+    its average lag calls? power.py's bar at ~10% activity: ~51.5%
+    lag precision, IR_min = 0.06.
+    """
+    import lightgbm as lgb
+    import numpy as np
+
+    from make_features import FEATURES, HORIZON
+
+    Q = 0.90                                   # fixed, pre-registered
+
+    df, matrix, folds, test_dates, fold_id, y_true, r = load_everything()
+    X, y = matrix[list(FEATURES)], matrix["y"]
+
+    params = dict(objective="multiclass", num_class=3, learning_rate=0.01,
+                  num_leaves=7, max_depth=3, min_data_in_leaf=50,
+                  feature_fraction=0.7, bagging_fraction=0.7, bagging_freq=1,
+                  lambda_l2=10.0, n_estimators=2000, random_state=SEED,
+                  verbosity=-1)
+
+    out, thresholds = [], []
+    for f in folds:
+        assert f.train_dates.max() < f.test_dates.min()
+        n_valid = int(0.15 * len(f.train_dates))
+        inner = f.train_dates[: -(n_valid + HORIZON)]
+        valid = f.train_dates[-n_valid:]
+
+        model = lgb.LGBMClassifier(**params)
+        model.fit(X.loc[inner], y.loc[inner],
+                  eval_set=[(X.loc[valid], y.loc[valid])],
+                  callbacks=[lgb.early_stopping(100, verbose=False)])
+
+        cls = list(model.classes_)
+        i_lag, i_flat, i_beat = (cls.index(c) for c in (-1.0, 0.0, 1.0))
+
+        thr = np.quantile(model.predict_proba(X.loc[valid])[:, i_lag], Q)
+        thresholds.append(thr)
+
+        p = model.predict_proba(X.loc[f.test_dates])
+        fired = p[:, i_lag] >= thr
+        rest = np.where(p[:, i_beat] >= p[:, i_flat], 1.0, 0.0)
+        out.append(np.where(fired, -1.0, rest))
+
+    codes = (np.concatenate(out) + 1).astype(np.int64)
+    x = evaluate_strategy(f"E4 lgbm tail (q={Q})", codes, r, y_true, fold_id)
+
+    fired = codes == 0
+    lag_hit = (y_true[fired] == 0).mean() if fired.any() else float("nan")
+    base = (y_true == 0).mean()
+    extra = ["",
+             f"  Fired on {fired.sum()} of {len(codes)} days; per-fold "
+             f"thresholds {min(thresholds):.3f}-{max(thresholds):.3f}",
+             f"  Lag precision on fired days: {lag_hit:.1%}   "
+             f"(base rate {base:.1%}; power.py's bar at ~10% activity: "
+             f"~51.5%)"]
+    return report("E4 lgbm tail", x, extra)
+
+
 if __name__ == "__main__":
     import sys
     globals()[sys.argv[1] if len(sys.argv) > 1 else "e1"]()
