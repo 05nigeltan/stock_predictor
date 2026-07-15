@@ -211,6 +211,29 @@ E1–E4's verdict: real, shallow, linear, unconditioned.
 calendar seasonality that prominent would have been a red flag worth
 auditing had any configuration passed the gates.
 
+### H1 — HOLDOUT PROTOCOL (pre-registered 2026-07-15, BEFORE the run)
+
+The locked holdout (2022-01-01 → data end) is evaluated **exactly
+once**, by one execution of `holdout.py`, which computes three
+strategies and nothing else:
+1. **always-long** — the anchor.
+2. **anti-persistence rule** — the hypothesis in executable form,
+   pre-registered in Phase 1 (B5's rule, zero fitted parameters).
+3. **LightGBM, frozen E3 config, argmax** — and only this model,
+   because spec §0 designated LightGBM primary in v2, before any
+   results existed. E1's better test-fold IR does NOT earn a slot:
+   selecting the holdout visitor by test performance is the exact
+   contamination the lock prevents.
+
+Mechanics: expanding annual retrains (train through each year-end,
+predict the next year — the project's operating assumption), 5-day
+purge + 2-day embargo via the splitter, inner-valid early stopping as
+in E3, evaluation via evaluate.py (IR + 90% MBB CI, per-year means,
+m-class PT, activity, fired-day lag precision). Purely descriptive: no
+configuration passed the gates on 2012–2021, so the holdout tests the
+NEGATIVE result's stability, not a success claim. After this run the
+holdout is spent.
+
 ### Status after E1–E4 (budget: 21 remaining)
 
 Every mechanism pre-registered in the plan has now been tested and
