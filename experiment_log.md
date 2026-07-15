@@ -173,6 +173,44 @@ folds 4/10 | PT p = 0.00 | **lag precision on fired days: 33.5%** vs
    at the achieved selectivity is nowhere near the bar, and deeper
    selectivity with an uninformative ranking cannot help.
 
+### A1 — SHAP falsification test, §1.5 (2026-07-15; analysis, not an E-entry)
+
+**Method:** E3's ten walk-forward models, each explaining its own test
+window (out-of-sample TreeSHAP via LightGBM `pred_contrib`), pooled
+2012–2021. Full record: `reports/shap_falsification.{md,png}`.
+
+**Findings against §1.5's three predictions:**
+1. **Direction — CONFIRMED, on the beat side, coherently.** §1.5
+   predicted "a negative contribution from recent returns." On the
+   BEAT class every member of the position cluster has negative
+   corr with its own SHAP (ret_5d −0.70, bb_pctb −0.65, rsi_14 −0.61,
+   px_to_sma20 −0.43, ret_10d −0.40): high recent returns uniformly
+   reduce predicted beat. The LAG mirror is only partial (ret_5d
+   +0.58, rsi_14 +0.30, others ~0 or negative) — the model fades
+   strength by stepping toward FLAT more than by predicting lag.
+2. **Importance — weak on the letter.** ret_5d ranks 12/21 at ~12% of
+   the top feature's attribution. The top features are the
+   conditioners themselves: sma20_to_sma200, vol_21d.
+3. **Vol strengthening — NOT confirmed.** Per raw unit of ret_5d the
+   high-vol slope is SHALLOWER (0.174 vs 0.400, ratio 0.4×); because
+   high-vol ret_5d spans ~3× the range, the per-sigma response is
+   roughly FLAT across regimes. The predicted amplification is absent
+   — vol enters as a level feature in its own right (#2 by |SHAP|),
+   not as a multiplier on the reversal signal. The interaction §1.4
+   bet on does not appear.
+
+**Verdict:** the reversal hypothesis is *not dead* on direction — the
+sign §1.5 demanded is present, out-of-sample, consistent with PT ≤
+0.02 everywhere. But it is small (rank 12), expressed as "reduce beat
+/ step aside" rather than "predict lag", and the volatility
+conditioning — the part of the hypothesis that was supposed to make it
+MONETIZABLE — is not there. This is the attribution-level portrait of
+E1–E4's verdict: real, shallow, linear, unconditioned.
+
+**Curiosity flagged, not chased:** `month` ranks #3 by |SHAP| —
+calendar seasonality that prominent would have been a red flag worth
+auditing had any configuration passed the gates.
+
 ### Status after E1–E4 (budget: 21 remaining)
 
 Every mechanism pre-registered in the plan has now been tested and
